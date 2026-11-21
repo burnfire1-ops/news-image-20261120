@@ -1,78 +1,63 @@
-// news-image-20261120 — 50 stories in one image.
-// Node 22, standard library only. The finished artwork is entry.png
-// in this same directory; this program places it into the output
-// directory (/output, or MAKEFUN_OUTPUT_DIR when set), along with the
-// 16 source illustrations the entry was composed from.
-// 50 stories = 4 hero + 12 Tier A + 34 brief.
-// Hero: AI meltdown (Nasdaq -5.2%), GTA VI $3.79B day one,
-// Russia hits Ukraine and Poland, Trump-Xi-Putin no nukes.
-// Tier A (12): Anthropic falls 9%, Myanmar rejects ICJ ruling,
-// COP31 splits over fossil fuels, Nvidia CEO Huang resigns,
-// Microsoft 365 down worldwide, EU Commission hit by cyberattack,
-// Google sends AI servers to orbit, Meta's Muse leaks private chats,
-// Claude cracks black holes, cyclones peak faster, tanker burns in
-// Hormuz Strait, Rosalía's LUX wins 3 Latin Grammys.
-// World map with 50 numbered pins; 34-brief index in 3 columns;
-// UTC timeline; date-check box. Total 1022/1024.
-// The gate takes a whole PNG or JPEG of at most 1 MiB, 1024x1024 px.
+// news-image-20261120 entrypoint: publish the 50-story front page + its 16 illustrations.
+//
+// The entry is a single 1024x1024 PNG (entry.png) plus the 16 illustration PNGs
+// it was composed from (4 heroes, 12 Tier A strips). This script copies them
+// into the harness output directory and verifies each one is a real PNG.
+import { copyFileSync, statSync, readFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { copyFileSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+const here = dirname(fileURLToPath(import.meta.url));
+const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+mkdirSync(out, { recursive: true });
 
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
-const artwork = new URL("./entry.png", import.meta.url);
-const dest = join(outDir, "entry.png");
-
-const illustrations = [
-  "hero1-meltdown.png",
-  "hero2-gtavi.png",
-  "hero3-ukraine.png",
-  "hero4-summit.png",
-  "strip01-anthropic.png",
-  "strip02-icj.png",
-  "strip03-cop31.png",
-  "strip04-huang.png",
-  "strip05-microsoft.png",
-  "strip06-eucyber.png",
-  "strip07-suncatcher.png",
-  "strip08-muse.png",
-  "strip09-blackhole.png",
-  "strip10-cyclone.png",
-  "strip11-hormuz.png",
-  "strip12-rosalia.png",
+// [source in this repo, destination name in the output dir]
+const FILES = [
+  ['entry.png', 'entry.png'],
+  ['hero1-meltdown.png', 'hero1-meltdown.png'],
+  ['hero2-gtavi.png', 'hero2-gtavi.png'],
+  ['hero3-ukraine.png', 'hero3-ukraine.png'],
+  ['hero4-summit.png', 'hero4-summit.png'],
+  ['strip01-anthropic.png', 'strip01-anthropic.png'],
+  ['strip02-icj.png', 'strip02-icj.png'],
+  ['strip03-cop31.png', 'strip03-cop31.png'],
+  ['strip04-huang.png', 'strip04-huang.png'],
+  ['strip05-microsoft.png', 'strip05-microsoft.png'],
+  ['strip06-eucyber.png', 'strip06-eucyber.png'],
+  ['strip07-suncatcher.png', 'strip07-suncatcher.png'],
+  ['strip08-muse.png', 'strip08-muse.png'],
+  ['strip09-blackhole.png', 'strip09-blackhole.png'],
+  ['strip10-cyclone.png', 'strip10-cyclone.png'],
+  ['strip11-hormuz.png', 'strip11-hormuz.png'],
+  ['strip12-rosalia.png', 'strip12-rosalia.png'],
 ];
 
-for (const name of illustrations) {
-  const src = new URL(`./${name}`, import.meta.url);
-  const dst = join(outDir, name);
-  copyFileSync(src, dst);
-  const s = statSync(src).size;
-  const d = statSync(dst).size;
-  if (d !== s) {
-    throw new Error(`${name} copy size mismatch: ${d} != ${s}`);
+// A real PNG starts with the 8-byte PNG signature and stores its width/height
+// as big-endian uint32 at bytes 16-23 (IHDR). Reject anything else.
+function checkPng(path, wantW, wantH) {
+  const buf = readFileSync(path);
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (buf.length < 24 || !buf.subarray(0, 8).equals(sig)) {
+    throw new Error(`not a PNG: ${path}`);
   }
+  const w = buf.readUInt32BE(16);
+  const h = buf.readUInt32BE(20);
+  if (wantW !== undefined && (w !== wantW || h !== wantH)) {
+    throw new Error(`bad size ${w}x${h} (want ${wantW}x${wantH}): ${path}`);
+  }
+  return { w, h, bytes: buf.length };
 }
 
-copyFileSync(artwork, dest);
-
-const srcSize = statSync(artwork).size;
-const dstSize = statSync(dest).size;
-if (dstSize !== srcSize) {
-  throw new Error(`entry.png copy size mismatch: ${dstSize} != ${srcSize}`);
+let totalBytes = 0;
+for (const [srcName, dstName] of FILES) {
+  const src = join(here, srcName);
+  const dst = join(out, dstName);
+  if (!existsSync(src)) throw new Error(`missing source: ${src}`);
+  copyFileSync(src, dst);
+  const info = checkPng(dst, srcName === 'entry.png' ? 1024 : undefined, srcName === 'entry.png' ? 1024 : undefined);
+  if (srcName === 'entry.png') {
+    console.log(`entry.png: ${info.w}x${info.h}, ${info.bytes} bytes`);
+  }
+  totalBytes += statSync(dst).size;
 }
-
-// Verify the bytes are a 1024x1024 PNG: check the 8-byte PNG
-// signature, then width/height from the IHDR chunk (bytes 16-23).
-const bytes = readFileSync(dest);
-const pngSig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-if (!bytes.subarray(0, 8).equals(pngSig)) {
-  throw new Error("entry.png is not a PNG (bad signature)");
-}
-const width = bytes.readUInt32BE(16);
-const height = bytes.readUInt32BE(20);
-if (width !== 1024 || height !== 1024) {
-  throw new Error(`entry.png dimensions ${width}x${height}, expected 1024x1024`);
-}
-console.log(`entry.png copied OK (${dstSize} bytes, ${width}x${height}) -> ${dest}`);
-console.log(`illustrations copied OK (${illustrations.length} files) -> ${outDir}`);
-console.log(`total files written: ${illustrations.length + 1} (entry.png + ${illustrations.length} illustrations)`);
+console.log(`published ${FILES.length} files (${totalBytes} bytes) to ${out}`);
