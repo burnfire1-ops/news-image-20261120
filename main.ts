@@ -54,9 +54,12 @@ for (const [srcName, dstName] of FILES) {
   const dst = join(out, dstName);
   if (!existsSync(src)) throw new Error(`missing source: ${src}`);
   copyFileSync(src, dst);
-  const info = checkPng(dst, srcName === 'entry.png' ? 1024 : undefined, srcName === 'entry.png' ? 1024 : undefined);
-  if (srcName === 'entry.png') {
+  const isEntry = srcName === 'entry.png';
+  const info = checkPng(dst, isEntry ? 1024 : undefined, isEntry ? 1024 : undefined);
+  if (isEntry) {
     console.log(`entry.png: ${info.w}x${info.h}, ${info.bytes} bytes`);
+  } else {
+    console.log(`${dstName}: ${info.w}x${info.h}`);
   }
   totalBytes += statSync(dst).size;
 }
